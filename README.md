@@ -64,6 +64,26 @@ Logs :
 ssh ubuntu@51.210.45.237 'journalctl -u srdata-collector -f'
 ```
 
+## Dashboard Grafana
+
+[grafana/dashboards/route-du-rhum.json](grafana/dashboards/route-du-rhum.json), provisionné dans le
+dossier « Route du Rhum » : http://51.210.45.237:3000/d/route-du-rhum-2026
+
+- filtres classe / bateau / pas des traces ;
+- carte des positions et traces, heure du dernier pointage, leaders par classe ;
+- une section par classe : classement complet et courbes (retard sur le leader, vitesse, VMG,
+  distance sur 24 h).
+
+Déploiement / mise à jour :
+
+```bash
+server/deploy_grafana.sh
+```
+
+Le fichier du dépôt est la référence : les modifications faites dans l'UI sont écrasées au
+prochain déploiement si le fichier a changé. Pour les garder, exporter le JSON depuis Grafana
+et le remplacer dans le dépôt.
+
 ### Accéder à l'UI InfluxDB
 
 ```bash

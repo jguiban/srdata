@@ -1,0 +1,911 @@
+{
+  "uid": "route-du-rhum-2026",
+  "title": "Route du Rhum 2026",
+  "tags": [
+    "srdata"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "2026-11-01T11:00:00.000Z",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "type": "custom",
+        "name": "classe",
+        "label": "Classe",
+        "query": "Ultim,IMOCA,Class40",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [
+          {
+            "text": "Ultim",
+            "value": "Ultim",
+            "selected": false
+          },
+          {
+            "text": "IMOCA",
+            "value": "IMOCA",
+            "selected": false
+          },
+          {
+            "text": "Class40",
+            "value": "Class40",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "type": "query",
+        "name": "bateau",
+        "label": "Bateau",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "influx-flux"
+        },
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"rdr2026\", tag: \"boat\", start: -60d,\n  predicate: (r) => r._measurement == \"report\" and contains(value: r.class, set: ${classe:json}))",
+        "definition": "boats",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "sort": 1,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
+        "type": "custom",
+        "name": "pas_trace",
+        "label": "Pas des traces",
+        "query": "15m,30m,1h,3h,6h",
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "1h",
+          "value": "1h"
+        },
+        "options": [
+          {
+            "text": "15m",
+            "value": "15m",
+            "selected": false
+          },
+          {
+            "text": "30m",
+            "value": "30m",
+            "selected": false
+          },
+          {
+            "text": "1h",
+            "value": "1h",
+            "selected": true
+          },
+          {
+            "text": "3h",
+            "value": "3h",
+            "selected": false
+          },
+          {
+            "text": "6h",
+            "value": "6h",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "geomap",
+      "title": "Positions et traces",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx-flux"
+      },
+      "maxDataPoints": 200000,
+      "gridPos": {
+        "h": 20,
+        "w": 17,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "traces",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"position\" and (r._field == \"lat\" or r._field == \"lon\"))\n\n  |> filter(fn: (r) => contains(value: r.class, set: ${classe:json}) and contains(value: r.boat, set: ${bateau:json}))\n  |> aggregateWindow(every: ${pas_trace}, fn: last, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()\n  |> keep(columns: [\"_time\", \"class\", \"boat\", \"lat\", \"lon\"])"
+        },
+        {
+          "refId": "positions",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"position\" and (r._field == \"lat\" or r._field == \"lon\"))\n\n  |> filter(fn: (r) => contains(value: r.class, set: ${classe:json}) and contains(value: r.boat, set: ${bateau:json}))\n  |> last()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()\n  |> keep(columns: [\"_time\", \"class\", \"boat\", \"skipper\", \"lat\", \"lon\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "class"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Ultim": {
+                        "color": "red",
+                        "index": 0,
+                        "text": "Ultim"
+                      },
+                      "IMOCA": {
+                        "color": "blue",
+                        "index": 1,
+                        "text": "IMOCA"
+                      },
+                      "Class40": {
+                        "color": "green",
+                        "index": 2,
+                        "text": "Class40"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "view": {
+          "id": "coords",
+          "lat": 33,
+          "lon": -33,
+          "zoom": 3.4,
+          "allLayers": true
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": true,
+          "showAttribution": true
+        },
+        "basemap": {
+          "type": "default",
+          "name": "Fond de carte"
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Traces",
+            "tooltip": false,
+            "filterData": {
+              "id": "byRefId",
+              "options": "traces"
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "lat",
+              "longitude": "lon"
+            },
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "field": "class",
+                  "fixed": "dark-green"
+                },
+                "opacity": 0.5,
+                "size": {
+                  "fixed": 2,
+                  "min": 2,
+                  "max": 2
+                },
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                },
+                "rotation": {
+                  "fixed": 0,
+                  "mode": "mod",
+                  "min": -360,
+                  "max": 360
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              }
+            }
+          },
+          {
+            "type": "markers",
+            "name": "Bateaux",
+            "tooltip": true,
+            "filterData": {
+              "id": "byRefId",
+              "options": "positions"
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "lat",
+              "longitude": "lon"
+            },
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "field": "class",
+                  "fixed": "dark-green"
+                },
+                "opacity": 1,
+                "size": {
+                  "fixed": 8,
+                  "min": 8,
+                  "max": 8
+                },
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                },
+                "rotation": {
+                  "fixed": 0,
+                  "mode": "mod",
+                  "min": -360,
+                  "max": 360
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              }
+            }
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Dernier pointage",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx-flux"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 7,
+        "x": 17,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"report\" and r._field == \"rank\")\n\n  |> group()\n  |> last()\n  |> map(fn: (r) => ({_time: r._time, _value: int(v: r._time) / 1000000}))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsLocalNoDateIfToday",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Leaders",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx-flux"
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 7,
+        "x": 17,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"report\" and (r._field == \"rank\" or r._field == \"dtf\"))\n\n  |> filter(fn: (r) => contains(value: r.class, set: ${classe:json}))\n  |> last()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => r.rank == 1.0)\n  |> group()\n  |> keep(columns: [\"class\", \"boat\", \"skipper\", \"dtf\"])"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "class": 0,
+              "boat": 1,
+              "skipper": 2,
+              "dtf": 3
+            },
+            "renameByName": {
+              "class": "Classe",
+              "boat": "Bateau",
+              "skipper": "Skipper",
+              "dtf": "Dist. arrivée"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Dist. arrivée"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: NM"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Classe"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Ultim": {
+                        "color": "red",
+                        "index": 0,
+                        "text": "Ultim"
+                      },
+                      "IMOCA": {
+                        "color": "blue",
+                        "index": 1,
+                        "text": "IMOCA"
+                      },
+                      "Class40": {
+                        "color": "green",
+                        "index": 2,
+                        "text": "Class40"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "type": "row",
+      "title": "$classe",
+      "repeat": "classe",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Classement $classe",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx-flux"
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"report\" and r.class == \"${classe}\")\n\n  |> filter(fn: (r) => contains(value: r.boat, set: ${bateau:json}))\n  |> filter(fn: (r) => contains(value: r._field, set: [\"rank\", \"status\", \"dtf\", \"dtl\", \"speed\", \"vmg\", \"dist2\", \"vmg2\", \"dog\", \"windspeed\"]))\n  |> last()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()\n  |> sort(columns: [\"rank\"])\n  |> keep(columns: [\"rank\", \"boat\", \"skipper\", \"status\", \"dtf\", \"dtl\", \"speed\", \"vmg\", \"dist2\", \"vmg2\", \"dog\", \"windspeed\", \"_time\"])"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "rank": 0,
+              "boat": 1,
+              "skipper": 2,
+              "status": 3,
+              "dtf": 4,
+              "dtl": 5,
+              "speed": 6,
+              "vmg": 7,
+              "dist2": 8,
+              "vmg2": 9,
+              "dog": 10,
+              "windspeed": 11,
+              "_time": 12
+            },
+            "renameByName": {
+              "rank": "Rang",
+              "boat": "Bateau",
+              "skipper": "Skipper",
+              "status": "Statut",
+              "dtf": "Dist. arrivée",
+              "dtl": "Retard leader",
+              "speed": "Vitesse",
+              "vmg": "VMG",
+              "dist2": "Dist. 24 h",
+              "vmg2": "VMG 24 h",
+              "dog": "Parcouru",
+              "windspeed": "Vent",
+              "_time": "Pointage"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Dist. arrivée"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: NM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Retard leader"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: NM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Dist. 24 h"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: NM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Parcouru"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: NM"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vitesse"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "velocityknot"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VMG"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "velocityknot"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VMG 24 h"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "velocityknot"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vent"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "velocityknot"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rang"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pointage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocalNoDateIfToday"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Rang",
+            "desc": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Retard sur le leader — $classe",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx-flux"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 35
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"report\" and r.class == \"${classe}\" and r._field == \"dtl\")\n\n  |> filter(fn: (r) => contains(value: r.boat, set: ${bateau:json}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"boat\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: NM",
+          "decimals": 1,
+          "displayName": "${__field.labels.boat}",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "sortBy": "Last *",
+          "sortDesc": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Vitesse — $classe",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx-flux"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 35
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"report\" and r.class == \"${classe}\" and r._field == \"speed\")\n\n  |> filter(fn: (r) => contains(value: r.boat, set: ${bateau:json}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"boat\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocityknot",
+          "decimals": 1,
+          "displayName": "${__field.labels.boat}",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "VMG — $classe",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx-flux"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"report\" and r.class == \"${classe}\" and r._field == \"vmg\")\n\n  |> filter(fn: (r) => contains(value: r.boat, set: ${bateau:json}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"boat\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocityknot",
+          "decimals": 1,
+          "displayName": "${__field.labels.boat}",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Distance parcourue sur 24 h — $classe",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influx-flux"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 45
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influx-flux"
+          },
+          "query": "from(bucket: \"rdr2026\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"report\" and r.class == \"${classe}\" and r._field == \"dist2\")\n\n  |> filter(fn: (r) => contains(value: r.boat, set: ${bateau:json}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"boat\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: NM",
+          "decimals": 1,
+          "displayName": "${__field.labels.boat}",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}

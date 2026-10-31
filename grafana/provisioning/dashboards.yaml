@@ -1,0 +1,11 @@
+apiVersion: 1
+providers:
+  - name: srdata
+    folder: Route du Rhum
+    type: file
+    # Les modifications faites dans l'UI sont enregistrées, mais le fichier du dépôt
+    # reste la référence : il les remplace au prochain déploiement s'il a changé.
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/srdata
