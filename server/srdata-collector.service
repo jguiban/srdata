@@ -1,0 +1,27 @@
+[Unit]
+Description=Collecte des pointages Route du Rhum vers InfluxDB
+After=network-online.target influxdb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=srdata
+Group=srdata
+EnvironmentFile=/root/srdata-credentials.env
+Environment=CLASSES=Ultim,IMOCA,Class40
+Environment=POLL_SECONDS=60
+Environment=ARCHIVE_DIR=/var/lib/srdata/archive
+Environment=PYTHONUNBUFFERED=1
+StateDirectory=srdata
+WorkingDirectory=/opt/srdata/collector
+ExecStart=/usr/bin/python3 /opt/srdata/collector/collector.py
+Restart=always
+RestartSec=30
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
