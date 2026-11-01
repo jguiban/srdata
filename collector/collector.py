@@ -59,8 +59,8 @@ def _tags(boat_id, boat):
 
 def report_to_lines(report, boats):
     ts = int(datetime.fromisoformat(report["date"]).timestamp())
-    if ts > time.time() + FUTURE_TOLERANCE:
-        return []
+    # Pointage daté dans le futur : on garde quand même les positions déjà passées de la trace
+    report_is_future = ts > time.time() + FUTURE_TOLERANCE
     out = []
     for line in report["lines"]:
         boat_id = str(line["boat"])
@@ -78,7 +78,8 @@ def report_to_lines(report, boats):
         if track:
             fields.append(f"lat={float(track[-1][1])}")
             fields.append(f"lon={float(track[-1][2])}")
-        out.append(f"report,{tags} {','.join(fields)} {ts}")
+        if not report_is_future:
+            out.append(f"report,{tags} {','.join(fields)} {ts}")
         out += track_to_lines(boat_id, track, boats)
     return out
 
