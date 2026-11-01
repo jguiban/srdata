@@ -2,8 +2,11 @@
 
 Interroge versions.txt toutes les POLL_SECONDS secondes ; à chaque nouvelle
 version de « live », écrit le pointage dans InfluxDB. Au démarrage, ou si des
-pointages ont été manqués, tout l'historique (tracker_reports) est réécrit :
-les écritures sont idempotentes (même série + même horodatage = écrasement).
+pointages ont été manqués, tout l'historique (tracker_reports) est réécrit.
+À chaque nouvelle version de « tracks », les nouveaux points de trace (plus
+denses que les pointages : toutes les 5 à 15 min) sont écrits ; au démarrage,
+toute la trace. Les écritures sont idempotentes (même série + même horodatage
+= écrasement).
 
 Mesures écrites :
   report   (horodatage du pointage) : classement, distances, vitesses, météo…
@@ -113,11 +116,11 @@ def write_lines(lines, batch=5000):
         urllib.request.urlopen(req, timeout=30).close()
 
 
-def archive(resource, version, raw):
+def archive(resource, version, raw, overwrite=False):
     if not ARCHIVE_DIR:
         return
     path = pathlib.Path(ARCHIVE_DIR) / f"{resource}_{version}.gz"
-    if not path.exists():
+    if overwrite or not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(gzip.compress(raw))
 
@@ -134,6 +137,8 @@ class Collector:
         self.versions = {}
         self.boats = {}
         self.last_report_id = None
+        # Horodatage du dernier point de trace écrit (None : tout l'historique reste à écrire)
+        self.tracks_until = None
 
     def tick(self):
         versions = geovoile.fetch_versions()
@@ -158,19 +163,30 @@ class Collector:
                 raw = geovoile.fetch_raw("reports", versions["reports"])
                 archive("reports", versions["reports"], raw)
                 reports = geovoile.parse_reports(raw) + live
-                raw = geovoile.fetch_raw("tracks", versions["tracks"])
-                archive("tracks", versions["tracks"], raw)
-                lines = [l for boat_id, track in geovoile.parse_tracks(raw).items()
-                         for l in track_to_lines(boat_id, track, self.boats)]
-                write_lines(lines)
-                log.info("rattrapage : %d pointages dans l'historique, %d positions de trace",
-                         len(reports), len(lines))
+                log.info("rattrapage : %d pointages dans l'historique", len(reports))
             else:
                 reports = live
             n = write_reports(reports, self.boats)
             log.info("live v%s : pointage %s, %d lignes écrites", versions["live"], latest_id, n)
             self.last_report_id = latest_id
             self.versions["live"] = versions["live"]
+
+        # Les traces sont plus denses que les pointages (positions toutes les 5 à 15 min) :
+        # on écrit les nouveaux points à chaque version, avec 1 h de recouvrement.
+        if versions.get("tracks") != self.versions.get("tracks"):
+            raw = geovoile.fetch_raw("tracks", versions["tracks"])
+            archive("tracks", time.strftime("%Y%m%d", time.gmtime()), raw, overwrite=True)
+            since = 0 if self.tracks_until is None else self.tracks_until - 3600
+            lines, until = [], self.tracks_until or 0
+            for boat_id, track in geovoile.parse_tracks(raw).items():
+                recent = [p for p in track if p[0] >= since]
+                lines += track_to_lines(boat_id, recent, self.boats)
+                until = max([until] + [p[0] for p in recent if p[0] <= time.time() + FUTURE_TOLERANCE])
+            if lines:
+                write_lines(lines)
+            log.info("tracks v%s : %d positions écrites", versions["tracks"], len(lines))
+            self.tracks_until = until
+            self.versions["tracks"] = versions["tracks"]
 
 
 def main():

@@ -45,11 +45,13 @@ bateaux des classes `Ultim`, `IMOCA` et `Class40` :
 
 | Mesure     | Horodatage            | Tags                                 | Champs |
 |------------|-----------------------|--------------------------------------|--------|
-| `report`   | heure du pointage     | `class`, `boat`, `boat_id`, `skipper` | `rank`, `status`, `dtf` (distance à l'arrivée, mn), `dtl` (retard sur le leader), `heading`, `speed`, `vmg`, `heading1/dist1/vmg1/dog1` et `heading2/dist2/vmg2/dog2` (moyennes sur deux périodes ; le site les paramètre à 240 et 1440 min, à confirmer pendant la course), `vitmax*`, `dog`, météo (`windspeed`, `winddir`, `waveheight`…), `lat`, `lon` |
+| `report`   | heure du pointage     | `class`, `boat`, `boat_id`, `skipper` | `rank`, `status`, `dtf` (distance à l'arrivée, mn), `dtl` (retard sur le leader), `heading`, `speed`, `vmg`, `heading1/dist1/vmg1/dog1` (sur 4 h) et `heading2/dist2/vmg2/dog2` (sur 24 h), `vitmax*`, `dog`, météo (`windspeed`, `winddir`, `waveheight`…, voir les échelles plus bas), `lat`, `lon` |
 | `position` | heure de chaque point | idem                                 | `lat`, `lon`, `dtf` |
 
-Au démarrage, et si un pointage a été manqué, tout l'historique (pointages + traces) est
-réécrit (écritures idempotentes). Les données publiées avant le départ, datées dans le futur,
+Les pointages sont publiés toutes les 5 min juste après le départ, puis toutes les heures ;
+les traces (`position`) sont plus denses : un point toutes les 15 min (5 min au départ). Les
+nouveaux points de trace sont écrits à chaque mise à jour du site. Au démarrage, et si un
+pointage a été manqué, tout l'historique (pointages + traces) est réécrit (écritures idempotentes). Les données publiées avant le départ, datées dans le futur,
 sont ignorées. Les fichiers décodés sont archivés dans `/var/lib/srdata/archive/`.
 
 Déploiement / mise à jour (service systemd `srdata-collector`) :
@@ -63,6 +65,35 @@ Logs :
 ```bash
 ssh ubuntu@51.210.45.237 'journalctl -u srdata-collector -f'
 ```
+
+## Données pour les polaires de vitesse
+
+Une polaire donne la vitesse du bateau en fonction de la force du vent réel (TWS) et de
+l'angle au vent réel (TWA). Les données collectées permettent de la reconstruire :
+
+| Grandeur | Source | Remarques |
+|----------|--------|-----------|
+| Vitesse et route fond (SOG, COG) | `position` : points successifs toutes les 15 min | à calculer (distance et cap entre deux points) ; `report.speed`/`heading` donnent aussi SOG/COG au pointage (horaire, cap entier) |
+| Direction du vent réel (TWD) | `report.winddir` | degrés, d'où vient le vent ; valeur horaire au pointage |
+| Force du vent réel (TWS) | `report.windspeed`, `report.windgust` | **en dixièmes de nœud** (137 = 13,7 nds) |
+| Angle au vent (TWA) | calculé | `TWD − COG`, ramené à 0–180° (bâbord/tribord confondus) |
+| Courant | `report.currentdir`, `report.currentspeed` | direction en degrés, vitesse **en dixièmes de nœud** ; permet de passer de la vitesse fond à la vitesse surface |
+| État de la mer | `report.waveheight`, `report.wavedir` | hauteur **en décimètres** |
+| Températures | `report.tempair`, `report.tempwater` | **en dixièmes de °C** |
+
+Échelles déduites des valeurs publiées (vent 13,7–21,6 nds, rafales jusqu'à 29,7 nds le soir
+du départ) ; à recouper avec l'affichage du site. `clouds` et `rain` : unité inconnue.
+
+Limites à garder en tête :
+
+- **Vent de modèle** : la météo est fournie par le site à la position de chaque bateau (modèle
+  du partenaire météo), pas mesurée à bord ; elle n'est donnée qu'aux pointages (horaires). Il
+  faut l'interpoler dans le temps pour les points de trace intermédiaires.
+- **Vitesse fond** : les traces donnent la vitesse fond ; la correction du courant donne la
+  vitesse surface.
+- **Pas de contexte à bord** : manœuvres, voiles, réduction de toile, avaries… La polaire
+  « réelle » s'obtient en gardant un haut percentile des vitesses par case TWS × TWA et en
+  écartant les points proches d'un virement ou d'un empannage (forte variation de cap).
 
 ## Dashboard Grafana
 
